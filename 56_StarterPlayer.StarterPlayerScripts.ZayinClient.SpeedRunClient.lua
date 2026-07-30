@@ -34,63 +34,97 @@ local function formatTimeShort(seconds)
 end
 
 -- ── Timer GUI ──
-local timerGui = Instance.new("ScreenGui")
-timerGui.Name         = "ZayinTimerGui"
-timerGui.ResetOnSpawn = false
-timerGui.DisplayOrder = 10
-timerGui.Enabled      = false
-timerGui.Parent       = playerGui
+-- [GUIFIX2] timerGui/frame/label sekarang variabel yang bisa dibuat-ulang.
+-- Sebagian jalur ganti avatar meng-Destroy() ScreenGui (bukan cuma melepas).
+-- Objek yang sudah di-Destroy Parent-nya LOCKED + NULL -> tak bisa di-parent
+-- lagi (dulu itu bikin error 'Parent property is locked' di baris 50).
+-- buatGui() bikin ulang dari nol; pastikanTerpasang() deteksi mati -> buat ulang.
+local timerGui, timerFrame, timerLabel, bestLabel
+local pastikanTerpasang  -- forward declaration
+local btValue  -- [BESTFIX] referensi leaderstats.BestTime, dipakai buatGui isi ulang Best
 
--- [GUIFIX] Sebagian jalur ganti avatar (ApplyDescription/rebuild) bisa
--- melepas ScreenGui dari PlayerGui walau ResetOnSpawn=false. Pasang ulang
--- otomatis kalau itu terjadi, supaya StartRE/FailedRE tidak jatuh ke GUI yatim.
-local function pastikanTerpasang()
+local function buatGui()
+	local pg = player:FindFirstChildOfClass("PlayerGui") or playerGui
+
+	timerGui = Instance.new("ScreenGui")
+	timerGui.Name         = "ZayinTimerGui"
+	timerGui.ResetOnSpawn = false
+	timerGui.DisplayOrder = 10
+	timerGui.Enabled      = false
+	timerGui.Parent       = pg
+
+	timerFrame = Instance.new("Frame", timerGui)
+	timerFrame.Size             = UDim2.new(0, 150, 0, 36)
+	timerFrame.AnchorPoint      = Vector2.new(0.5, 0)
+	timerFrame.Position         = UDim2.new(0.5, 0, 0.01, 0)
+	timerFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+	timerFrame.BackgroundTransparency = 0.2
+	timerFrame.BorderSizePixel  = 0
+	Instance.new("UICorner", timerFrame).CornerRadius = UDim.new(0, 8)
+	local timerStroke = Instance.new("UIStroke", timerFrame)
+	timerStroke.Color     = Color3.fromRGB(0, 255, 220)
+	timerStroke.Thickness = 1.5
+
+	timerLabel = Instance.new("TextLabel", timerFrame)
+	timerLabel.Size               = UDim2.new(1, 0, 0.55, 0)
+	timerLabel.Position           = UDim2.new(0, 0, 0, 0)
+	timerLabel.BackgroundTransparency = 1
+	timerLabel.Text               = "00:00.000"
+	timerLabel.TextColor3         = Color3.fromRGB(0, 255, 220)
+	timerLabel.TextScaled         = true
+	timerLabel.Font               = Enum.Font.GothamBold
+
+	bestLabel = Instance.new("TextLabel", timerFrame)
+	bestLabel.Size               = UDim2.new(1, 0, 0.4, 0)
+	bestLabel.Position           = UDim2.new(0, 0, 0.58, 0)
+	bestLabel.BackgroundTransparency = 1
+	bestLabel.Text               = "Best: -"
+	bestLabel.TextColor3         = Color3.fromRGB(255, 215, 0)
+	bestLabel.TextScaled         = true
+	bestLabel.Font               = Enum.Font.Gotham
+
+	-- [BESTFIX] kalau GUI ini dibuat ulang (mis. sesudah ganti avatar), langsung
+	-- isi Best dari nilai leaderstats yang sudah ada, jangan tunggu bt.Changed
+	-- (yang cuma menyala saat rekor berubah). Tanpa ini, bestLabel baru tetap "-".
+	if btValue and btValue.Value ~= "-" then
+		bestLabel.Text = "Best: " .. btValue.Value
+	end
+
+	-- kalau ScreenGui ini lepas (parent jadi nil), coba pasang balik;
+	-- kalau ternyata sudah di-Destroy, pastikanTerpasang yang buat ulang.
+	timerGui.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			task.defer(pastikanTerpasang)
+		end
+	end)
+end
+
+-- deteksi GUI mati/lepas dengan aman lalu perbaiki
+pastikanTerpasang = function()
 	local pg = player:FindFirstChildOfClass("PlayerGui")
-	if pg and timerGui.Parent ~= pg then
-		timerGui.Parent = pg
+	if not pg then return end
+	-- akses properti objek yang sudah di-Destroy bisa melempar error -> pcall
+	local ok, terpasang = pcall(function()
+		return timerGui and timerGui.Parent == pg
+	end)
+	if ok and terpasang then return end
+	-- coba pasang balik dulu (kasus cuma lepas, belum Destroy)
+	local ok2 = pcall(function()
+		if timerGui and timerGui.Parent ~= pg then timerGui.Parent = pg end
+	end)
+	-- kalau gagal (Parent locked = sudah Destroy) atau tetap tidak nempel -> buat ulang
+	local ok3, masihNempel = pcall(function() return timerGui and timerGui.Parent == pg end)
+	if not ok2 or not ok3 or not masihNempel then
+		buatGui()
 	end
 end
-timerGui.AncestryChanged:Connect(function(_, parent)
-	if parent == nil then
-		task.defer(pastikanTerpasang)
-	end
-end)
+
+buatGui()
 player.CharacterAdded:Connect(function()
 	-- beri waktu PlayerGui/avatar selesai lalu pastikan GUI masih nempel
 	task.delay(0.2, pastikanTerpasang)
 	task.delay(1.5, pastikanTerpasang)
 end)
-
-local timerFrame = Instance.new("Frame", timerGui)
-timerFrame.Size             = UDim2.new(0, 150, 0, 36)
-timerFrame.AnchorPoint      = Vector2.new(0.5, 0)
--- FIX: hanya satu assignment Position (sebelumnya duplikat)
-timerFrame.Position         = UDim2.new(0.5, 0, 0.01, 0)
-timerFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
-timerFrame.BackgroundTransparency = 0.2
-timerFrame.BorderSizePixel  = 0
-Instance.new("UICorner", timerFrame).CornerRadius = UDim.new(0, 8)
-local timerStroke = Instance.new("UIStroke", timerFrame)
-timerStroke.Color     = Color3.fromRGB(0, 255, 220)
-timerStroke.Thickness = 1.5
-
-local timerLabel = Instance.new("TextLabel", timerFrame)
-timerLabel.Size               = UDim2.new(1, 0, 0.55, 0)
-timerLabel.Position           = UDim2.new(0, 0, 0, 0)
-timerLabel.BackgroundTransparency = 1
-timerLabel.Text               = "00:00.000"
-timerLabel.TextColor3         = Color3.fromRGB(0, 255, 220)
-timerLabel.TextScaled         = true
-timerLabel.Font               = Enum.Font.GothamBold
-
-local bestLabel = Instance.new("TextLabel", timerFrame)
-bestLabel.Size               = UDim2.new(1, 0, 0.4, 0)
-bestLabel.Position           = UDim2.new(0, 0, 0.58, 0)
-bestLabel.BackgroundTransparency = 1
-bestLabel.Text               = "Best: -"
-bestLabel.TextColor3         = Color3.fromRGB(255, 215, 0)
-bestLabel.TextScaled         = true
-bestLabel.Font               = Enum.Font.Gotham
 
 -- Load BestTime dari leaderstats
 task.spawn(function()
@@ -98,8 +132,11 @@ task.spawn(function()
 	if ls then
 		local bt = ls:WaitForChild("BestTime", 10)
 		if bt then
+			btValue = bt  -- [BESTFIX] simpan referensi supaya buatGui bisa isi ulang
 			local function updateBest()
-				if bt.Value ~= "-" then bestLabel.Text = "Best: " .. bt.Value end
+				if bt.Value ~= "-" and bestLabel then
+					bestLabel.Text = "Best: " .. bt.Value
+				end
 			end
 			updateBest()
 			bt.Changed:Connect(updateBest)
