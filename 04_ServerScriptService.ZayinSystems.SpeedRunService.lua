@@ -340,12 +340,16 @@ Players.PlayerRemoving:Connect(function(player)
 	debounce[player.UserId .. "_finish"] = nil
 end)
 
--- Reset timer saat player teleport (KembaliKeBasecamp)
+-- [TP-LANJUT] Teleport TIDAK membatalkan speedrun. Dulu handler ini memanggil
+-- resetTimer (startTime/savepoints dihapus, active=false) sehingga kena part
+-- Teleport = speedrun batal diam-diam. Sekarang timer & savepoint DIBIARKAN
+-- utuh; cuma armProximity supaya detektor tetap aktif setelah pindah posisi.
+-- (spawnAtCheckpoint memindahkan HRP via CFrame, bukan LoadCharacter, jadi tak
+-- ada CharacterAdded/resetTimer dari jalur lain.)
 local _ZR = game:GetService("ReplicatedStorage"):WaitForChild("ZayinRemotes", 10)
 local _tpOccurred = _ZR and _ZR:FindFirstChild("TeleportOccurred")
 if _tpOccurred then
 	_tpOccurred.OnServerEvent:Connect(function(player)
-		resetTimer(player)
 		armProximity(player, player.Character)
 	end)
 end
