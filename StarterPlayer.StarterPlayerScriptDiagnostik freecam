@@ -1,0 +1,20 @@
+-- TEMPEL script ini sebagai LocalScript di StarterPlayerScripts (sementara),
+-- atau jalankan di Client Command Bar saat Play.
+-- Ia mencatat SETIAP kali ScreenGui apa pun berubah Enabled, lengkap dgn nama.
+-- Tujuan: tahu GUI mana yang mati & KAPAN saat kamu ubah speed + tekan hide.
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local pg = player:WaitForChild("PlayerGui")
+
+local function pantau(gui)
+	if not gui:IsA("ScreenGui") then return end
+	gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+		print(string.format("[DIAG] %-22s Enabled -> %s  (t=%.2f)",
+			gui.Name, tostring(gui.Enabled), os.clock()))
+	end)
+end
+
+for _, g in ipairs(pg:GetChildren()) do pantau(g) end
+pg.ChildAdded:Connect(pantau)
+print("[DIAG] Pemantau aktif. Sekarang: masuk freecam, ubah speed, tekan hide. Lihat urutan log.")
