@@ -151,7 +151,7 @@ local SLOT = { kanan = nil, kiri = nil }
 local SLOT_URUT = {}  -- urutan buka, untuk tahu mana yang paling lama
 
 local _specGC do local o, g = pcall(function() return require(game:GetService("ReplicatedStorage"):WaitForChild("ZayinConfig",10):WaitForChild("GameConfig",10)) end) if o then _specGC = g end end
-	local refreshSpec = function() end
+local refreshSpec = function() end
 
 -- [P46] closeMenuAll dideklarasikan di bawah closeMenu
 local function closeAllSub()
@@ -264,7 +264,7 @@ for i, item in ipairs(ITEMS) do
 						local arah = (slotDipakai == "kanan") and 30 or -30
 						TweenService:Create(lamaPanel, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
 							{BackgroundTransparency = 1,
-							 Position = UDim2.new(0, lamaPanel.Position.X.Offset + arah, 0, lamaPanel.Position.Y.Offset)}):Play()
+								Position = UDim2.new(0, lamaPanel.Position.X.Offset + arah, 0, lamaPanel.Position.Y.Offset)}):Play()
 						local lp = lamaPanel
 						task.delay(0.19, function()
 							if lp then lp.Visible = false; lp.BackgroundTransparency = 0 end
@@ -498,7 +498,7 @@ refreshSpec = function()
 		if not (c:IsA("UIListLayout") or c:IsA("UIPadding")) then c:Destroy() end
 	end
 	specPlayers = {}
-		for _, p in pairs(Players:GetPlayers()) do
+	for _, p in pairs(Players:GetPlayers()) do
 		if p ~= player then
 			local rid = p:GetAttribute("RoleId")
 			local RS2 = game:GetService("ReplicatedStorage")
@@ -822,6 +822,11 @@ local function updateHideBtn()
 end
 
 hideBtn.MouseButton1Click:Connect(function()
+	-- [FREECAMGUARD] JANGAN pakai tombol Hide ZayinMenuBaru selama freecam aktif.
+	-- Saat freecam, FreecamController sudah mengelola semua GUI (hiddenGuis-nya
+	-- sendiri). Kalau tombol ini ikut jalan, dua daftar sembunyi (hiddenGuiList vs
+	-- hiddenGuis) saling menimpa -> daftar jadi kosong -> GUI tak kembali permanen.
+	if _G.ZayinFreecamActive == true then return end
 	uiHidden = not uiHidden
 	if uiHidden then
 		hiddenGuiList = {}
@@ -1108,11 +1113,41 @@ task.spawn(function()
 	game:GetService("RunService").RenderStepped:Connect(function()
 		local fcActive = _G.ZayinFreecamActive == true
 		if fcActive == _lastFcState then return end
+		local wasActive = _lastFcState
 		_lastFcState = fcActive
 		for _, b in ipairs(topBtns) do
 			if b and b.Parent then b.Visible = not fcActive end
 		end
+		-- [FREECAMGUARD2] Saat KELUAR freecam (true -> false): paksa reset state Hide
+		-- ZayinMenuBaru. Kalau uiHidden terlanjur true sebelum/selama freecam, menu
+		-- utama (menuBtn) & GUI game tetap tersembunyi permanen walau freecam sudah
+		-- mengembalikan Enabled. Reset di sini menjamin menu selalu balik normal.
+		if wasActive == true and fcActive == false then
+			if uiHidden then
+				for _, gui in ipairs(hiddenGuiList) do
+					if gui and gui.Parent then gui.Enabled = true end
+				end
+				uiHidden = false
+				hiddenGuiList = {}
+				updateHideBtn()
+			end
+			menuBtn.Visible = true
+		end
 	end)
+end)
+
+-- [FREECAMGUARD3] JARING PENGAMAN TERAKHIR: apa pun yang terjadi, kalau freecam
+-- TIDAK aktif tapi menuBtn tersembunyi & uiHidden false (state tak sinkron akibat
+-- urutan event freecam/boombox), paksa tampilkan menuBtn lagi. Cek ringan tiap ~0.3s.
+task.spawn(function()
+	while true do
+		task.wait(0.3)
+		if _G.ZayinFreecamActive ~= true and not uiHidden then
+			if menuBtn and menuBtn.Parent and menuBtn.Visible == false then
+				menuBtn.Visible = true
+			end
+		end
+	end
 end)
 
 -- ── END TOP RIGHT BUTTONS ────────────────────────────────────
