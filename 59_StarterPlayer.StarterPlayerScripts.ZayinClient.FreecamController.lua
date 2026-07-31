@@ -62,6 +62,36 @@ Instance.new("UICorner", exitBtn).CornerRadius = UDim.new(0,10)
 local sk = Instance.new("UIStroke", exitBtn)
 sk.Color = Color3.fromRGB(255,80,80); sk.Thickness = 1.5
 
+-- ── Tombol HIDE (lingkaran) di ATAS tombol Exit ──
+-- Menyembunyikan / menampilkan tombol Exit Freecam. Bentuk lingkaran.
+local hideBtn = Instance.new("TextButton")
+hideBtn.Name = "HideExitBtn"
+hideBtn.Size = UDim2.fromOffset(40, 40)
+-- exitBtn di kanan bawah (1,-150 .. lebar 140 -> tengahnya 1,-80).
+-- Taruh hideBtn tepat di ATAS exitBtn, rata tengah dengan exitBtn.
+hideBtn.Position = UDim2.new(1, -90, 1, -105)
+hideBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+hideBtn.BorderSizePixel = 0
+hideBtn.Text = "👁"
+hideBtn.TextColor3 = Color3.new(1,1,1)
+hideBtn.Font = Enum.Font.GothamBold
+hideBtn.TextSize = 18
+hideBtn.ZIndex = 11
+hideBtn.AutoButtonColor = true
+hideBtn.Parent = exitGui
+Instance.new("UICorner", hideBtn).CornerRadius = UDim.new(1, 0) -- lingkaran penuh
+local hsk = Instance.new("UIStroke", hideBtn)
+hsk.Color = Color3.fromRGB(120,120,160); hsk.Thickness = 1.5
+
+local exitTersembunyi = false
+local function toggleHideExit()
+	exitTersembunyi = not exitTersembunyi
+	exitBtn.Visible = not exitTersembunyi
+	hideBtn.Text = exitTersembunyi and "🚫" or "👁"
+end
+hideBtn.MouseButton1Click:Connect(toggleHideExit)
+hideBtn.TouchTap:Connect(toggleHideExit)
+
 -- ── Mobile UI ──
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "FreecamMobileGui"
@@ -118,15 +148,41 @@ local upBtn   = makeBtn("▲", -150)
 local downBtn = makeBtn("▼", -95)
 
 -- ── Helper ──
+local guisTersembunyi = false  -- [FREECAMFIX2] penjaga supaya snapshot tak dobel
+
 local function hideAllGuis()
+	-- [FREECAMFIX] kalau exitGui/mobileGui sudah lepas dari PlayerGui (mis. karena
+	-- ganti avatar), pasang balik supaya tombol Exit pasti muncul.
+	local pg = player:FindFirstChildOfClass("PlayerGui") or playerGui
+	pcall(function()
+		if exitGui.Parent ~= pg then exitGui.Parent = pg end
+		if mobileGui.Parent ~= pg then mobileGui.Parent = pg end
+	end)
+	-- reset kondisi hide setiap masuk freecam supaya tombol Exit selalu terlihat
+	exitTersembunyi = false
+	exitBtn.Visible = true
+	hideBtn.Text = "👁"
+
+	-- [FREECAMFIX2] JANGAN ambil snapshot dua kali. Kalau sudah tersembunyi
+	-- (hideAllGuis terpanggil lagi tanpa showAllGuis di antaranya), semua GUI game
+	-- sudah Enabled=false -> scan kedua menghasilkan hiddenGuis KOSONG -> showAllGuis
+	-- nanti tak mengembalikan apa pun -> semua menu hilang permanen. Penjaga ini
+	-- memastikan snapshot cuma diambil sekali per sesi freecam.
+	if guisTersembunyi then
+		exitGui.Enabled = true
+		if isMobile then mobileGui.Enabled = true end
+		return
+	end
+
 	hiddenGuis = {}
-	for _, gui in pairs(playerGui:GetChildren()) do
+	for _, gui in pairs(pg:GetChildren()) do
 		if gui:IsA("ScreenGui") and gui.Enabled and
 			gui ~= exitGui and gui ~= mobileGui then
 			gui.Enabled = false
 			table.insert(hiddenGuis, gui)
 		end
 	end
+	guisTersembunyi = true
 	exitGui.Enabled = true
 	if isMobile then mobileGui.Enabled = true end
 end
@@ -134,10 +190,23 @@ end
 local function showAllGuis()
 	exitGui.Enabled = false
 	mobileGui.Enabled = false
-	for _, gui in ipairs(hiddenGuis) do
-		if gui and gui.Parent then gui.Enabled = true end
+	if #hiddenGuis > 0 then
+		for _, gui in ipairs(hiddenGuis) do
+			if gui and gui.Parent then gui.Enabled = true end
+		end
+	else
+		-- [FREECAMFIX2] jaring pengaman: kalau daftar kosong (mis. state pernah
+		-- tak sinkron), nyalakan kembali SEMUA ScreenGui game supaya menu tak
+		-- hilang permanen. exitGui/mobileGui tetap dimatikan di atas.
+		local pg = player:FindFirstChildOfClass("PlayerGui") or playerGui
+		for _, gui in pairs(pg:GetChildren()) do
+			if gui:IsA("ScreenGui") and gui ~= exitGui and gui ~= mobileGui then
+				gui.Enabled = true
+			end
+		end
 	end
 	hiddenGuis = {}
+	guisTersembunyi = false  -- [FREECAMFIX2] sesi hide selesai
 end
 
 local BLOCKED_KEYS = {
@@ -163,6 +232,7 @@ local function unblockCharacterInput()
 end
 
 local function activateFreecam()
+	if isActive then return end  -- [FREECAMFIX2] cegah aktivasi ganda (hideAllGuis dobel)
 	isActive = true
 	savedCamType = camera.CameraType
 	local lv = camera.CFrame.LookVector
